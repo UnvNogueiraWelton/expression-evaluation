@@ -1,33 +1,46 @@
 export default class CalculatorController {
   #view;
   #nodeFactory;
-  #precedence;
+  #numberRules;
+  #operatorRules;
 
   constructor({ view, nodeFactory }) {
     this.#view = view;
     this.#nodeFactory = nodeFactory;
+    this.#numberRules = ['CLOSE_PARENTHESIS', 'OPERATOR'];
+    this.#operatorRules = [
+      'NUMBER',
+      'VARIABLE',
+      'EXPRESSION',
+      'OPEN_PARENTHESIS',
+    ];
   }
 
   #lexer(expression) {
     return expression.map((char) => {
       // Numeros
       if (/\d/.test(char)) {
-        return { type: 'NUMBER', value: parseFloat(char) };
+        return this.#nodeFactory.create('NUMBER', parseFloat(char));
       }
 
       // Variaveis
       if (/[A-Z]/.test(char)) {
-        return { type: 'VARIABLE', value: char };
+        return this.#nodeFactory.create('VARIABLE', char);
       }
 
       // Operadores
       if (/[\+\-\*\/]/.test(char)) {
-        return { type: 'OPERATOR', value: char };
+        return this.#nodeFactory.create('OPERATOR', char);
       }
 
-      // Parenteses
-      if (char === '(' || char === ')') {
-        return { type: 'PARENTHESIS', value: char };
+      // Abertura Parenteses
+      if (char === '(') {
+        return { type: 'OPEN_PARENTHESIS', value: char };
+      }
+
+      // Fechamento Parenteses
+      if (char === ')') {
+        return { type: 'CLOSE_PARENTHESIS', value: char };
       }
 
       // Erro lexico
@@ -35,77 +48,83 @@ export default class CalculatorController {
     });
   }
 
-  #createExpressionTree(tokens) {
-    let current = 0;
+  #getPrecedence(op) {
+    if (op === '+' || op === '-') return 1;
+    if (op === '*' || op === '/') return 2;
+    return 0;
+  }
 
-    function parseExpression(precedence = 0) {
-      let node;
+  #buildTree(tokens, start = 0, end = tokens.length - 1) {
+    if (start === end) return tokens[start];
 
-      const token = tokens[current];
-      if (token.type === 'NUMBER') {
-        current++;
-        node = this.#nodeFactory.create('LITERAL', token.value);
-      } else if (token.type === 'VARIABLE') {
-        const variableValue = this.#view.getVariableValue(token.value);
-        current++;
+    let minPrecedence = Infinity;
+    let splitIndex = null;
+    let balance = 0;
 
-        if (isNaN(variableValue)) {
-          throw new Error('Variavel nao pode possuir valor nao numerico!');
+    for (let i = start; i <= end; i++) {
+      const token = tokens[i];
+
+      if (token.type === 'OPEN_PARENTHESIS') balance++;
+      if (token.type === 'CLOSE_PARENTHESIS') balance--;
+
+      if (token.type == 'NUMBER' && i !== tokens.length - 1) {
+        if (!this.#numberRules.includes(tokens[i + 1].type)) {
+          throw new Error('Erro de Syntaxe');
         }
+      }
 
-        node = this.#nodeFactory.create('NUMBER', variableValue);
-      } else if (token.type === 'PARENTHESIS' && token.value === '(') {
-        current++;
-        node = parseExpression.apply(this);
+      if (
+        balance === 0 &&
+        token.type == 'OPERATOR' &&
+        this.#getPrecedence(token.value) <= minPrecedence
+      ) {
         if (
-          tokens[current].type === 'PARENTHESIS' &&
-          tokens[current].value === ')'
+          !tokens[i + 1] ||
+          !this.#operatorRules.includes(tokens[i + 1].type)
         ) {
-          current++;
-        } else {
-          throw new Error('Syntax Error: Missing closing parenthesis');
+          throw new Error('Erro de Syntaxe');
         }
+
+        minPrecedence = this.#getPrecedence(token.value);
+        splitIndex = i;
       }
-
-      while (current < tokens.length) {
-        const nextToken = tokens[current];
-        let nextPrecedence = 0;
-
-        if (nextToken.type === 'OPERATOR') {
-          if (nextToken.value === '+' || nextToken.value === '-') {
-            nextPrecedence = 1;
-          } else if (nextToken.value === '*' || nextToken.value === '/') {
-            nextPrecedence = 2;
-          }
-        }
-
-        if (precedence >= nextPrecedence) {
-          break;
-        }
-
-        current++;
-
-        const newNode = this.#nodeFactory.create('EXPRESSION', nextToken.value);
-        newNode.setLeft(node);
-        newNode.setRight(parseExpression.apply(this, [nextPrecedence]));
-        node = newNode;
-      }
-
-      return node;
     }
 
-    return parseExpression.apply(this);
+    if (balance !== 0) {
+      throw new Error('Parênteses desequilibrados');
+    }
+
+    if (
+      tokens[start].type === 'OPEN_PARENTHESIS' &&
+      tokens[end].type === 'CLOSE_PARENTHESIS'
+    ) {
+      return this.#buildTree(tokens, start + 1, end - 1);
+    }
+
+    const root = this.#nodeFactory.create('EXPRESSION', tokens[splitIndex]);
+
+    root.left = this.#buildTree(tokens, start, splitIndex - 1);
+    root.right = this.#buildTree(tokens, splitIndex + 1, end);
+
+    return root;
   }
 
   #evaluate(node) {
-    console.log(node);
     switch (node.type) {
-      case 'LITERAL':
+      case 'NUMBER':
         return node.value;
+      case 'VARIABLE':
+        const variableValue = this.#view.getVariableValue(node.value);
+
+        if (isNaN(variableValue)) {
+          throw new Error('Variavel nao pode possuir valor nao numerico');
+        }
+
+        return parseFloat(variableValue);
       case 'EXPRESSION':
         const left = this.#evaluate.apply(this, [node.left]);
         const right = this.#evaluate.apply(this, [node.right]);
-        switch (node.value) {
+        switch (node.value.value) {
           case '+':
             return left + right;
           case '-':
@@ -125,7 +144,8 @@ export default class CalculatorController {
   #calculate(expression) {
     try {
       const tokens = this.#lexer(expression.match(/(\d+)|([^\s])/g));
-      const root = this.#createExpressionTree(tokens);
+      const root = this.#buildTree(tokens);
+      this.#view.showResult(this.#evaluate(root));
     } catch (err) {
       this.#view.handleError(err);
     }

@@ -9,7 +9,7 @@ export default class CalculatorView {
   }
 
   handleError(error) {
-    alert(`Erro: ${error}`);
+    alert(`${error}`);
     this.resultContainer.innerText = '';
   }
 

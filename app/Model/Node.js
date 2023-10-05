@@ -5,12 +5,4 @@ export default class Node {
     this.left = null;
     this.right = null;
   }
-
-  setLeft(node) {
-    this.left = node;
-  }
-
-  setRight(node) {
-    this.right = node;
-  }
 }
