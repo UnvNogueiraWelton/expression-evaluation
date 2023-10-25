@@ -159,6 +159,7 @@ export default class CalculatorController {
     } catch (err) {
       this.#view.handleError(err);
     }
+    this.#variables = {};
   }
 
   init() {
