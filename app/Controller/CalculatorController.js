@@ -110,14 +110,23 @@ export default class CalculatorController {
   }
 
   #evaluate(node) {
+    const variables = {};
+    let variableValue = null;
+    
     switch (node.type) {
       case 'NUMBER':
         return node.value;
       case 'VARIABLE':
-        const variableValue = this.#view.getVariableValue(node.value);
+        if(variables[node.value]) {
+          variableValue = variables[node.value];
+        } else {
+            variableValue = this.#view.getVariableValue(node.value);
 
-        if (isNaN(variableValue)) {
-          throw new Error('Variavel nao pode possuir valor nao numerico');
+            if (isNaN(variableValue)) {
+              throw new Error('Variavel nao pode possuir valor nao numerico');
+            }
+
+            variables[node.value] = variableValue;
         }
 
         return parseFloat(variableValue);
