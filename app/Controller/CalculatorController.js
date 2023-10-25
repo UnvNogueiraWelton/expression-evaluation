@@ -3,6 +3,7 @@ export default class CalculatorController {
   #nodeFactory;
   #numberRules;
   #operatorRules;
+  #variables;
 
   constructor({ view, nodeFactory }) {
     this.#view = view;
@@ -14,6 +15,7 @@ export default class CalculatorController {
       'EXPRESSION',
       'OPEN_PARENTHESIS',
     ];
+    this.#variables = {}
   }
 
   #lexer(expression) {
@@ -110,15 +112,14 @@ export default class CalculatorController {
   }
 
   #evaluate(node) {
-    const variables = {};
     let variableValue = null;
     
     switch (node.type) {
       case 'NUMBER':
         return node.value;
       case 'VARIABLE':
-        if(variables[node.value]) {
-          variableValue = variables[node.value];
+        if(this.#variables[node.value]) {
+          variableValue = this.#variables[node.value];
         } else {
             variableValue = this.#view.getVariableValue(node.value);
 
@@ -126,7 +127,7 @@ export default class CalculatorController {
               throw new Error('Variavel nao pode possuir valor nao numerico');
             }
 
-            variables[node.value] = variableValue;
+            this.#variables[node.value] = variableValue;
         }
 
         return parseFloat(variableValue);
